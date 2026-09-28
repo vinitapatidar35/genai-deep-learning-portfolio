@@ -414,3 +414,211 @@ print(f"Dimensions: {x.ndim}")   # number of dimensions
 - `torch.tensor(32, 32, 3)` fails; use `torch.rand(32, 32, 3)`.
 
 ---
+
+## Topic 19 - Manipulating Tensors
+
+Basic maths on tensors: add, subtract, multiply and divide. With a single number, the operation is applied to every element.
+
+```python
+prices = torch.tensor([100, 200, 300])  # create a tensor of item prices
+prices + 10                             # add 10 to every price
+prices - 10                             # subtract 10 from every price
+prices * 2                              # multiply every price by 2
+prices / 2                              # divide every price by 2
+prices = prices + 10                    # store the result back to keep the change
+```
+
+| Operation     | Symbol | Function           | Result for `[100, 200, 300]` |
+|---------------|--------|--------------------|------------------------------|
+| Add 10        | `+`    | `torch.add(x, 10)` | `[110, 210, 310]`            |
+| Subtract 10   | `-`    | `torch.sub(x, 10)` | `[90, 190, 290]`             |
+| Multiply by 2 | `*`    | `torch.mul(x, 2)`  | `[200, 400, 600]`            |
+| Divide by 2   | `/`    | `torch.div(x, 2)`  | `[50., 100., 150.]`          |
+
+**Remember**
+
+- Each operation returns a new tensor; the original is unchanged
+- Store it back to keep the change: `x = x + 10`
+- Tensor with tensor works position by position (same shape needed)
+
+**Watch out**
+
+- Division always gives float results, even for whole-number tensors
+- The library is `torch`: write `torch.add(...)`, not `tensor.add(...)`
+
+---
+
+## Topic 20 - Matrix Multiplication
+
+Matrix multiplication multiplies matching pairs and then adds them up. It is the core operation of deep learning.
+
+### Element-wise vs matrix multiplication
+
+```python
+prices = torch.tensor([10, 20, 30])  # price of each item
+quantity = torch.tensor([2, 1, 3])   # how many of each item we buy
+prices * quantity                    # element-wise: cost of each item
+prices @ quantity                    # matrix multiplication: total bill
+torch.matmul(prices, quantity)       # same as prices @ quantity
+```
+
+| Operation             | Symbol                | Result for the example |
+|-----------------------|-----------------------|------------------------|
+| Element-wise          | `*`                   | `[20, 20, 90]`         |
+| Matrix multiplication | `@` or `torch.matmul` | `130` (20 + 20 + 90)   |
+
+For two vectors this is called the **dot product**. A neuron's weighted sum (inputs x weights, added up) is a dot product.
+
+### Matrix x matrix
+
+Result at [row i, column j] = row i of the first matrix dot column j of the second.
+
+```python
+A = torch.tensor([[1, 2], [3, 4]])  # create a 2x2 matrix
+B = torch.tensor([[5, 6], [7, 8]])  # create another 2x2 matrix
+A @ B                               # rows of A dot columns of B
+```
+
+|                     | Column 0 of B `[5, 7]` | Column 1 of B `[6, 8]` |
+|---------------------|------------------------|------------------------|
+| Row 0 of A `[1, 2]` | 1x5 + 2x7 = 19         | 1x6 + 2x8 = 22         |
+| Row 1 of A `[3, 4]` | 3x5 + 4x7 = 43         | 3x6 + 4x8 = 50         |
+
+### The 2 shape rules
+
+1. The inner dimensions must match: `(a x b) @ (b x c)`
+2. The result has the outer dimensions: `(a x c)`
+
+| Shapes        | Inner dimensions | Result |
+|---------------|------------------|--------|
+| (2x3) @ (3x2) | 3 = 3            | 2x2    |
+| (3x2) @ (2x3) | 2 = 2            | 3x3    |
+| (1x6) @ (6x1) | 6 = 6            | 1x1    |
+| (6x1) @ (1x6) | 1 = 1            | 6x6    |
+| (3x2) @ (3x2) | 2 and 3 differ   | Error  |
+
+### Fixing shape errors with transpose
+
+Transpose swaps rows and columns, so a (2 x 3) becomes (3 x 2).
+
+```python
+t3 = torch.rand(2, 3)  # create a random 2x3 matrix
+t4 = torch.rand(2, 3)  # create another random 2x3 matrix
+t3 @ t4.T              # (2x3) @ (3x2) gives a 2x2 result
+t3.T @ t4              # (3x2) @ (2x3) gives a 3x3 result
+```
+
+**Remember**
+
+- `x.T` (or `torch.transpose(x, 0, 1)`) swaps rows and columns; the original is unchanged
+- A neural network layer computes `inputs @ weights.T + bias`
+- With two vectors, PyTorch treats the first as a row and the second as a column
+- `torch.matmul` is much faster than a Python for loop
+
+**Watch out**
+
+- `A @ B` is usually not the same as `B @ A`
+- For a dot product, both vectors must have the same length
+- Shape errors look like: `RuntimeError: mat1 and mat2 shapes cannot be multiplied (3x2 and 3x2)`
+- Check the two shapes side by side before every `@`
+
+---
+
+## Extras - Other Names, Integer Types and Timing Code
+
+### Other names for the same thing
+
+Some functions and datatypes have more than one name. They do exactly the same thing.
+
+| Main name            | Other names                     | What it does                           |
+|----------------------|---------------------------------|----------------------------------------|
+| `torch.matmul(A, B)` | `A @ B`, `torch.mm(A, B)`       | Matrix multiplication (`mm`: 2-D only) |
+| `torch.mul(x, y)`    | `torch.multiply(x, y)`, `x * y` | Element-wise multiplication            |
+| `torch.float32`      | `torch.float`                   | 32-bit decimals                        |
+| `torch.float16`      | `torch.half`                    | 16-bit decimals                        |
+| `torch.float64`      | `torch.double`                  | 64-bit decimals                        |
+| `torch.int64`        | `torch.long`                    | 64-bit whole numbers                   |
+
+### Integer datatypes
+
+Each integer type can only hold numbers within a certain range.
+
+| dtype         | Range                                      | Memory for 1 million numbers |
+|---------------|--------------------------------------------|------------------------------|
+| `torch.int8`  | -128 to 127                                | 1 MB                         |
+| `torch.uint8` | 0 to 255 (no negatives)                    | 1 MB                         |
+| `torch.int16` | about -32 thousand to +32 thousand         | 2 MB                         |
+| `torch.int32` | about -2.1 billion to +2.1 billion         | 4 MB                         |
+| `torch.int64` | about -9.2 quintillion to +9.2 quintillion | 8 MB                         |
+
+```python
+big = torch.tensor([100, 200, 300])                      # create whole numbers (default int64)
+small = big.type(torch.int8)                             # convert to 8-bit whole numbers (-128 to 127)
+pixels = torch.tensor([0, 128, 255], dtype=torch.uint8)  # 8-bit unsigned: 0 to 255, like pixel values
+```
+
+`small` becomes `[100, -56, 44]`: 200 and 300 are too big for int8, so they wrap around.
+
+### Timing code
+
+```python
+%%time
+vec @ vec  # %%time on the first line of a notebook cell measures how long the cell takes
+```
+
+- "Wall time" in the output is the real time you waited
+- `%time` (single %) times just one line
+- Magic commands like `%%time` work in notebooks, not in `.py` files
+
+**Remember**
+
+- `torch.mm` only works on 2-D matrices; `torch.matmul` and `@` also handle vectors
+- Error messages often say "Long", which means `int64`
+- `uint8` (0 to 255) is common for image pixel values
+- Smaller types save memory; 8-bit models are used on mobile devices
+
+**Watch out**
+
+- Numbers too big for an integer type wrap around silently, with no error
+- Python for loops over tensors are very slow; use PyTorch operations like `@` instead
+
+---
+
+## Topic 23 - Min, Max, Mean and Sum
+
+These operations reduce a whole tensor to a single number (also called aggregation).
+
+```python
+marks = torch.tensor([45, 60, 72, 38, 85])  # create a tensor of 5 students' marks
+marks.min()                                 # lowest mark
+marks.max()                                 # highest mark
+marks.sum()                                 # total of all marks
+marks.type(torch.float32).mean()            # average mark (mean needs a float tensor)
+marks.argmin()                              # position of the lowest mark
+marks.argmax()                              # position of the highest mark
+marks[marks.argmax()]                       # use the position to look up the highest mark
+```
+
+| Operation   | Method           | Function             | Result for the example |
+|-------------|------------------|----------------------|------------------------|
+| Lowest      | `x.min()`        | `torch.min(x)`       | `tensor(38)`           |
+| Highest     | `x.max()`        | `torch.max(x)`       | `tensor(85)`           |
+| Total       | `x.sum()`        | `torch.sum(x)`       | `tensor(300)`          |
+| Average     | `x.mean()`       | `torch.mean(x)`      | `tensor(60.)`          |
+| Lowest at   | `x.argmin()`     | `torch.argmin(x)`    | `tensor(3)`            |
+| Highest at  | `x.argmax()`     | `torch.argmax(x)`    | `tensor(4)`            |
+
+**Remember**
+
+- `argmin` / `argmax` give the position (index), not the value
+- If the max appears more than once, `argmax` returns the first position
+- Classification models use `argmax` to turn scores into a predicted label
+- `.item()` turns a one-number result into a plain Python number
+
+**Watch out**
+
+- `mean` fails on whole-number tensors (`Got: Long`); convert first: `x.type(torch.float32).mean()`
+- `torch.argmax()` needs a tensor inside the brackets: `torch.argmax(x)`
+
+---
+

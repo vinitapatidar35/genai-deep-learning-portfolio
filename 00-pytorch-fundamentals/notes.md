@@ -622,3 +622,357 @@ marks[marks.argmax()]                       # use the position to look up the hi
 
 ---
 
+## Extra - Using dim with sum, mean, max and argmax
+
+`dim` tells PyTorch which direction to work in. The `dim` you choose is the dimension that disappears.
+
+```python
+# rows = students, columns = subjects
+marks = torch.tensor([[80, 70, 90],
+                      [60, 85, 75]])
+marks.sum(dim=0)                            # add down each column: total per subject
+marks.sum(dim=1)                            # add across each row: total per student
+marks.type(torch.float32).mean(dim=1)       # average per student (mean needs float)
+marks.argmax(dim=1)                         # position of each student's best subject
+marks.max(dim=0).values                     # highest mark in each subject
+```
+
+| Code           | Works            | Result for a `[2, 3]` tensor |
+|----------------|------------------|------------------------------|
+| `x.sum()`      | On everything    | One number                   |
+| `x.sum(dim=0)` | Down each column | Shape `[3]`, one per column  |
+| `x.sum(dim=1)` | Across each row  | Shape `[2]`, one per row     |
+
+**Remember**
+
+- "Per row" means `dim=1`; "per column" means `dim=0`
+- `x.max(dim=...)` returns values and positions: use `.values` or `.indices`
+- `dim` in PyTorch works like `axis` in NumPy
+
+---
+
+## Topic 25 - Reshaping, Viewing and Stacking
+
+### reshape
+
+Rearranges the same numbers into a new shape. The numbers are filled in order, row by row.
+
+```python
+eggs = torch.arange(1, 13)  # create 12 numbers: 1 to 12
+eggs.reshape(3, 4)          # 3 rows of 4
+eggs.reshape(1, 12)         # add an extra dimension: 1 row of 12
+eggs.reshape(3, -1)         # 3 rows; PyTorch works out the columns
+eggs.reshape(-1)            # flatten into one long row
+```
+
+### view
+
+Shows the same data in a new shape without copying. Changing one changes the other.
+
+```python
+x = torch.tensor([10, 20, 30, 40])  # create 4 numbers
+z = x.view(2, 2)                    # the same numbers seen as 2 rows of 2
+z[0, 0] = 100                       # change a number through the view (x changes too)
+copy = x.clone().view(2, 2)         # an independent copy, so changes don't affect x
+```
+
+|                        | `view`                    | `reshape`                               |
+|------------------------|---------------------------|-----------------------------------------|
+| Same data or copy?     | Always the same data      | Same data if possible, otherwise a copy |
+| If it can't share data | Gives an error            | Makes a copy and works                  |
+| When to use            | When you want shared data | By default                              |
+
+### stack
+
+Joins tensors of the same shape and creates a new dimension.
+
+```python
+a = torch.tensor([80, 70, 90])  # marks in test 1
+b = torch.tensor([60, 85, 75])  # marks in test 2
+torch.stack([a, b], dim=0)      # one below the other: each tensor is a row
+torch.stack([a, b], dim=1)      # side by side: each tensor is a column
+```
+
+| Code                         | Result for 2 tensors of shape `[3]` |
+|------------------------------|-------------------------------------|
+| `torch.stack([a, b], dim=0)` | `[2, 3]`, each tensor is a row      |
+| `torch.stack([a, b], dim=1)` | `[3, 2]`, each tensor is a column   |
+
+**Remember**
+
+- The product of the new shape must equal the total number of items
+- `-1` means "work this size out"; only one `-1` is allowed
+- `x.clone()` makes an independent copy (like NumPy's `.copy()`)
+- The original tensor keeps its shape; store the reshaped result
+
+**Watch out**
+
+- Wrong total gives: `RuntimeError: shape '[5, 3]' is invalid for input of size 12`
+- After `.T` (transpose), use `reshape`, not `view`
+- `stack` needs every tensor to have the same shape
+
+---
+
+## Topic 26 - Squeezing, Unsqueezing and Permuting
+
+A dimension of size 1 is extra wrapping: an extra bracket, but no extra numbers.
+
+### squeeze and unsqueeze
+
+```python
+x = torch.tensor([[10, 20, 30]])  # shape [1, 3]
+x.squeeze()                       # remove every size-1 dimension: shape [3]
+
+v = torch.tensor([10, 20, 30])    # shape [3]
+v.unsqueeze(dim=0)                # add a size-1 dimension at the front: shape [1, 3] (a row)
+v.unsqueeze(dim=1)                # add a size-1 dimension at the end: shape [3, 1] (a column)
+```
+
+| Start shape     | Code               | New shape          |
+|-----------------|--------------------|--------------------|
+| `[1, 3, 1, 4]`  | `squeeze()`        | `[3, 4]`           |
+| `[2, 3]`        | `squeeze()`        | `[2, 3]` (no change) |
+| `[3]`           | `unsqueeze(dim=0)` | `[1, 3]`           |
+| `[3]`           | `unsqueeze(dim=1)` | `[3, 1]`           |
+| `[3, 224, 224]` | `unsqueeze(dim=0)` | `[1, 3, 224, 224]` |
+
+### permute
+
+Reorders the dimensions. The numbers are the old positions, written in the new order.
+
+```python
+img = torch.rand(224, 224, 3)  # height, width, colour
+img.permute(2, 0, 1)           # colour, height, width: shape [3, 224, 224]
+```
+
+**Remember**
+
+- `squeeze` removes size-1 dimensions; it does not subtract 1 from sizes
+- `unsqueeze` needs `dim`: the position where the new 1 goes
+- Common uses: add a batch dimension (`unsqueeze(dim=0)`), one feature per sample (`unsqueeze(dim=1)`), remove extra dimensions from model outputs (`squeeze()`)
+- `permute` keeps every value with its correct row, column and channel
+- For 2 dimensions, `permute(1, 0)` is the same as `.T`
+
+**Watch out**
+
+- `reshape` to the same shape scrambles data; use `permute` to reorder dimensions
+- `permute` needs exactly one number per dimension
+- `torch.tensor([10, 20, 30])` holds three numbers; `torch.rand(10, 20, 30)` has shape `[10, 20, 30]`
+- `permute` shares data with the original (like `view`); after permuting, use `reshape`, not `view`
+
+---
+
+## Topic 27 - Selecting Data (Indexing)
+
+Indexing picks values out of a tensor with `[ ]`. Counting starts at 0.
+
+### Rows, columns and single values
+
+```python
+# rows = students, columns = subjects
+marks = torch.tensor([[80, 70, 90],
+                      [60, 85, 75],
+                      [95, 65, 88]])
+marks[1]        # row 1
+marks[1, 2]     # row 1, column 2 (same as marks[1][2])
+marks[-1]       # the last row
+marks[:, 0]     # all rows, column 0
+marks[0:2, :]   # rows 0 and 1, all columns
+marks[:, 1:]    # all rows, columns 1 to the end
+```
+
+### 3-D tensors
+
+A 3-D tensor is indexed as `[tray, row, column]`.
+
+```python
+x = torch.arange(1, 10).reshape(1, 3, 3)  # 1 tray, 3 rows, 3 columns
+x[0, 2, 2]                                # tray 0, row 2, column 2: the number 9
+x[0, :, 2]                                # tray 0, all rows, column 2: [3, 6, 9]
+x[:, :, 1]                                # all trays, all rows, column 1: [[2, 5, 8]]
+```
+
+| Index type     | Example  | Effect on the dimension |
+|----------------|----------|-------------------------|
+| Single number  | `x[3]`   | Removed                 |
+| Colon          | `x[:, 0]`| Kept (all of it)        |
+| Range          | `x[3:]`  | Kept (part of it)       |
+
+**Remember**
+
+- `:` means "all" of that dimension
+- `start:end` selects a range; the end is not included
+- Negative indexes count from the end: `-1` is the last
+- Shape shortcut: each picked number removes its size, each `:` or range keeps it
+- `x[i][j]` and `x[i, j]` give the same result; the comma style is preferred
+
+**Watch out**
+
+- `x[3]` has shape `[3]` but `x[3:]` has shape `[1, 3]`: a single index removes the dimension, a range keeps it
+- A selected column comes out as a 1-D tensor (printed as a row)
+- Extra brackets in a result mean `:` kept a dimension of size 1
+
+---
+
+## Topic 28 - PyTorch and NumPy
+
+Data often arrives as NumPy arrays (from pandas, image loaders and so on). PyTorch models need tensors, so we convert between them.
+
+### NumPy to PyTorch
+
+```python
+import numpy as np                                      # load the NumPy library
+
+array = np.arange(1.0, 8.0)                             # a NumPy array (float64 by default)
+tensor = torch.from_numpy(array)                        # NumPy to PyTorch: keeps float64
+tensor32 = torch.from_numpy(array).type(torch.float32)  # convert, then change to float32 for models
+```
+
+### PyTorch to NumPy
+
+```python
+t = torch.ones(3)                                       # a float32 tensor
+a = t.numpy()                                           # PyTorch to NumPy: keeps float32
+safe = t.clone().numpy()                                # copy first for a fully independent array
+```
+
+### Same data or separate?
+
+| Conversion                                  | Same data or separate?   |
+|---------------------------------------------|--------------------------|
+| `torch.from_numpy(arr)`                     | Same data                |
+| `t.numpy()`                                 | Same data                |
+| `torch.from_numpy(arr).type(torch.float32)` | Separate (new dtype)     |
+| `torch.tensor(arr)`                         | Separate (always copies) |
+| `t.clone().numpy()`                         | Separate                 |
+
+When they share data:
+
+| How you change it       | Does the other one change?    |
+|-------------------------|-------------------------------|
+| `x[0] = 100` (in place) | Yes, the data is shared       |
+| `x = x + 1` (reassign)  | No, a new object is created   |
+| After `.clone()`        | No, they no longer share data |
+
+**Remember**
+
+- NumPy's default decimal type is float64; PyTorch's is float32
+- `from_numpy` and `.numpy()` keep the original dtype
+- Add `.type(torch.float32)` after converting from NumPy, because models work in float32
+- Use `.clone()` before `.numpy()` when you need an independent copy
+
+**Watch out**
+
+- float64 data in a float32 model causes a "wrong datatype" error
+- In-place changes affect both the tensor and the array when they share data
+- `.numpy()` only works on CPU tensors (use `.cpu()` first for GPU tensors)
+
+---
+
+## Topic 29 - Reproducibility
+
+Random numbers in PyTorch are pseudo-random: they come from a fixed list. A seed picks which list to use and starts at its beginning, so the same seed always gives the same numbers.
+
+```python
+torch.manual_seed(42)  # go to the start of list 42
+A = torch.rand(3, 4)   # read the first 12 numbers
+torch.manual_seed(42)  # go back to the start of list 42
+B = torch.rand(3, 4)   # read the same 12 numbers again
+print(A == B)          # all True: compare position by position
+```
+
+| What you do                         | Same numbers? |
+|-------------------------------------|---------------|
+| No seed, call `rand` twice          | No            |
+| Set the seed before each `rand`     | Yes           |
+| Set the seed once, call `rand` twice | No (it keeps reading the list) |
+
+**Remember**
+
+- `torch.manual_seed(n)` picks list number n; any whole number works
+- 42 has no special meaning; it's a popular joke from a novel
+- `a == b` compares two tensors position by position (True / False)
+- Seeds make results repeatable: a model starts with the same random weights every run
+
+**Watch out**
+
+- The seed only sets the starting point; set it again to repeat the numbers
+
+---
+
+## Topic 30 - Accessing a GPU
+
+A GPU does thousands of simple calculations at the same time, which makes deep learning much faster. CUDA is NVIDIA's software that lets PyTorch use an NVIDIA GPU: PyTorch -> CUDA -> GPU.
+
+### Checking for a GPU
+
+```python
+torch.cuda.is_available()          # True if PyTorch can use an NVIDIA GPU
+torch.cuda.device_count()          # how many NVIDIA GPUs PyTorch can see
+torch.backends.mps.is_available()  # Apple Silicon Macs only
+```
+
+```python
+!nvidia-smi   # run NVIDIA's tool to show the GPU's name and memory
+```
+
+| Check                       | Question it asks               | Laptop (Intel only) | Colab (T4 GPU)         |
+|-----------------------------|--------------------------------|---------------------|------------------------|
+| `torch.cuda.is_available()` | Can PyTorch use an NVIDIA GPU? | `False`             | `True`                 |
+| `torch.cuda.device_count()` | How many NVIDIA GPUs?          | `0`                 | `1`                    |
+| `!nvidia-smi`               | What GPU is this?              | Error               | Table showing Tesla T4 |
+
+### Getting a free GPU on Google Colab
+
+1. colab.research.google.com -> New notebook
+2. Runtime -> Change runtime type -> T4 GPU -> Save
+3. Run the checks above (PyTorch is already installed)
+
+**Remember**
+
+- `cuda` in PyTorch code means "the NVIDIA GPU"; `cuda:0` is the first one
+- `!` at the start of a notebook cell runs a terminal command
+- Without a GPU, PyTorch uses the CPU: slower, but everything works
+- Use the GPU only when needed; for small tensors the CPU is fine
+
+**Watch out**
+
+- CUDA only works with NVIDIA GPUs, not Intel or AMD
+- Changing Colab's runtime type resets the session; rerun cells from the top
+- Free Colab GPU time is limited, and sessions reset when idle
+- On Windows, the default `pip install torch` is CPU-only, even with an NVIDIA GPU
+
+---
+## Topic 31 - Device-Agnostic Code
+
+Device-agnostic code runs on CPU or GPU without changing any lines.
+
+```python
+device = "cuda" if torch.cuda.is_available() else "cpu"  # use the NVIDIA GPU if there is one, otherwise the CPU
+
+x = torch.tensor([1, 2, 3])  # tensors are created on the CPU by default
+x = x.to(device)             # move a copy to the chosen device and store it back
+array = x.cpu().numpy()      # copy back to the CPU before converting to NumPy
+```
+
+| Code              | What it does                                           |
+|-------------------|--------------------------------------------------------|
+| `x.to(device)`    | Copy x to the chosen device                            |
+| `x.cpu()`         | Copy x back to the CPU (does nothing if already there) |
+| `x.cpu().numpy()` | Convert to NumPy from any device                       |
+| `x.device`        | Where x lives: `cpu` or `cuda:0`                       |
+
+**Remember**
+
+- Write the `device` line once, at the top of the notebook
+- `.to(device)` returns a new tensor: store it back with `x = x.to(device)`
+- A GPU tensor prints `device='cuda:0'` (the first NVIDIA GPU)
+- The 3 common errors: what shape, what datatype, where (device)
+
+**Watch out**
+
+- `.numpy()` on a GPU tensor fails: use `x.cpu().numpy()`
+- Tensors on different devices can't be combined: `Expected all tensors to be on the same device`
+- Fix device errors by moving every tensor with `.to(device)`
+
+---
